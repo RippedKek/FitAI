@@ -62,7 +62,11 @@ function formatDate(date: Date, formatStr: string): string {
   } ${date.getDate()}, ${year}`
 }
 
-function formatTabDate(date: Date): string {
+function formatTabDate(date: Date): {
+  day: string
+  date: string
+  month: string
+} {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const months = [
     'Jan',
