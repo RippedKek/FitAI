@@ -11,6 +11,8 @@ import {
   useUpdateWorkout,
   useUpdateWorkoutLog,
   useDeleteWorkoutLog,
+  useCreateCardioLog,
+  useCardioLogs,
 } from '@/hooks/useFirestore'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { BottomNav } from '@/components/layout/bottom-nav'
@@ -48,8 +50,17 @@ import {
   Sparkles,
   BarChart3,
   Trophy,
+  Activity,
+  Clock,
+  Footprints,
+  Zap,
+  Calendar,
 } from 'lucide-react'
 import type { Workout, Exercise, Set, WorkoutLog } from '@/lib/firestore'
+import {
+  estimateCardioCalories,
+  type CardioInput,
+} from '@/services/aiCardioEstimator'
 
 // Simple date formatter
 function formatDate(date: Date): string {
@@ -84,6 +95,7 @@ export default function WorkoutsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showAIForm, setShowAIForm] = useState(false)
   const [showLogForm, setShowLogForm] = useState(false)
+  const [showCardioForm, setShowCardioForm] = useState(false)
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null)
   const [workoutName, setWorkoutName] = useState('')
   const [exercises, setExercises] = useState<Exercise[]>([])
@@ -99,6 +111,19 @@ export default function WorkoutsPage() {
 
   const weeklyStats = workoutLogs ? getWeeklyStats(workoutLogs) : []
   const exerciseStats = workoutLogs ? getExerciseStats(workoutLogs) : []
+
+  // Cardio state
+  const createCardio = useCreateCardioLog()
+  const { data: cardioLogsForWeek } = useCardioLogs(
+    user?.uid || null,
+    weekAgo,
+    today
+  )
+  const [cardioMethod, setCardioMethod] = useState<'steps' | 'time'>('time')
+  const [cardioSteps, setCardioSteps] = useState<number | ''>('')
+  const [cardioDuration, setCardioDuration] = useState<number | ''>('')
+  const [cardioPace, setCardioPace] = useState<number | ''>('')
+  const [isLoggingCardio, setIsLoggingCardio] = useState(false)
 
   const handleAddExercise = () => {
     if (!currentExercise.trim()) return
@@ -266,6 +291,73 @@ export default function WorkoutsPage() {
     setLoggedExercises([])
   }
 
+  const handleLogCardio = async () => {
+    if (!user) return
+    setIsLoggingCardio(true)
+    try {
+      const cardioInput: CardioInput = {
+        method: cardioMethod,
+      }
+      if (cardioMethod === 'time') {
+        if (!cardioDuration || !cardioPace) {
+          alert('Please provide duration and avg pace')
+          setIsLoggingCardio(false)
+          return
+        }
+        cardioInput.durationMinutes = Number(cardioDuration)
+        cardioInput.avgPaceMinPerKm = Number(cardioPace)
+        cardioInput.distanceKm = Number(cardioDuration) / Number(cardioPace)
+      } else {
+        if (!cardioSteps) {
+          alert('Please provide steps')
+          setIsLoggingCardio(false)
+          return
+        }
+        cardioInput.steps = Number(cardioSteps)
+        if (cardioPace) cardioInput.avgPaceMinPerKm = Number(cardioPace)
+        cardioInput.distanceKm = (Number(cardioSteps) * 0.78) / 1000
+      }
+
+      const profileModule = await import('@/lib/firestore')
+      const profile = await profileModule.getUserProfile(user.uid)
+
+      const est = await estimateCardioCalories(
+        {
+          weight: profile?.weight || 70,
+          height: profile?.height,
+          age: profile?.age,
+          gender: profile?.gender,
+        },
+        cardioInput
+      )
+
+      await createCardio.mutateAsync({
+        uid: user.uid,
+        cardio: {
+          date: today,
+          type: 'running',
+          method: cardioMethod,
+          steps: cardioInput.steps,
+          durationMinutes: cardioInput.durationMinutes,
+          avgPaceMinPerKm: cardioInput.avgPaceMinPerKm,
+          distanceKm: cardioInput.distanceKm,
+          caloriesBurned: est,
+        },
+      })
+
+      setCardioDuration('')
+      setCardioPace('')
+      setCardioSteps('')
+      setShowCardioForm(false)
+      alert(`Logged run — estimated ${est} kcal burned`)
+    } catch (err) {
+      console.error(err)
+      alert('Failed to log cardio')
+    } finally {
+      setIsLoggingCardio(false)
+    }
+  }
+
   return (
     <AuthGuard>
       <div className='flex min-h-screen flex-col md:flex-row'>
@@ -273,7 +365,7 @@ export default function WorkoutsPage() {
         <main className='flex-1 pb-16 md:pb-0 md:ml-64'>
           <div className='container mx-auto px-4 py-8 max-w-7xl'>
             {/* Header */}
-            <div className='mb-8 flex items-center justify-between'>
+            <div className='mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
               <div>
                 <div className='flex items-center gap-3 mb-2'>
                   <div className='p-2 rounded-lg bg-primary/10'>
@@ -288,6 +380,14 @@ export default function WorkoutsPage() {
                 </p>
               </div>
               <div className='flex gap-2'>
+                <Button
+                  onClick={() => setShowCardioForm(true)}
+                  variant='outline'
+                  className='shadow-sm hover:shadow-md transition-shadow'
+                >
+                  <Activity className='mr-2 h-4 w-4' />
+                  Log Cardio
+                </Button>
                 <Button
                   onClick={() => setShowAIForm(true)}
                   variant='outline'
@@ -306,7 +406,243 @@ export default function WorkoutsPage() {
               </div>
             </div>
 
-            {/* AI Workout Generator Form */}
+            {/* Cardio Log Form Modal */}
+            {showCardioForm && (
+              <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
+                <Card className='w-full max-w-md shadow-2xl'>
+                  <div className='h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500'></div>
+                  <CardHeader>
+                    <CardTitle className='flex items-center gap-2'>
+                      <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
+                        <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
+                      </div>
+                      Log Cardio Activity
+                    </CardTitle>
+                    <CardDescription>
+                      Track your running or walking session
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='space-y-4'>
+                      <div className='flex gap-3 p-3 bg-muted rounded-lg'>
+                        <label className='flex items-center gap-2 cursor-pointer flex-1'>
+                          <input
+                            type='radio'
+                            name='cardio-method'
+                            checked={cardioMethod === 'time'}
+                            onChange={() => setCardioMethod('time')}
+                            className='w-4 h-4'
+                          />
+                          <div className='flex items-center gap-2'>
+                            <Clock className='w-4 h-4 text-primary' />
+                            <span className='text-sm font-medium'>
+                              Time + Pace
+                            </span>
+                          </div>
+                        </label>
+                        <label className='flex items-center gap-2 cursor-pointer flex-1'>
+                          <input
+                            type='radio'
+                            name='cardio-method'
+                            checked={cardioMethod === 'steps'}
+                            onChange={() => setCardioMethod('steps')}
+                            className='w-4 h-4'
+                          />
+                          <div className='flex items-center gap-2'>
+                            <Footprints className='w-4 h-4 text-primary' />
+                            <span className='text-sm font-medium'>Steps</span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {cardioMethod === 'time' ? (
+                        <div className='space-y-3'>
+                          <div>
+                            <Label
+                              htmlFor='duration'
+                              className='flex items-center gap-2'
+                            >
+                              <Clock className='w-4 h-4 text-muted-foreground' />
+                              Duration (minutes)
+                            </Label>
+                            <Input
+                              id='duration'
+                              type='number'
+                              value={cardioDuration as any}
+                              onChange={(e) =>
+                                setCardioDuration(
+                                  e.target.value ? Number(e.target.value) : ''
+                                )
+                              }
+                              className='mt-1'
+                              placeholder='e.g., 30'
+                            />
+                          </div>
+                          <div>
+                            <Label
+                              htmlFor='pace'
+                              className='flex items-center gap-2'
+                            >
+                              <Zap className='w-4 h-4 text-muted-foreground' />
+                              Average Pace (min/km)
+                            </Label>
+                            <Input
+                              id='pace'
+                              type='number'
+                              step='0.1'
+                              value={cardioPace as any}
+                              onChange={(e) =>
+                                setCardioPace(
+                                  e.target.value ? Number(e.target.value) : ''
+                                )
+                              }
+                              className='mt-1'
+                              placeholder='e.g., 6.5'
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='space-y-3'>
+                          <div>
+                            <Label
+                              htmlFor='steps'
+                              className='flex items-center gap-2'
+                            >
+                              <Footprints className='w-4 h-4 text-muted-foreground' />
+                              Steps
+                            </Label>
+                            <Input
+                              id='steps'
+                              type='number'
+                              value={cardioSteps as any}
+                              onChange={(e) =>
+                                setCardioSteps(
+                                  e.target.value ? Number(e.target.value) : ''
+                                )
+                              }
+                              className='mt-1'
+                              placeholder='e.g., 10000'
+                            />
+                          </div>
+                          <div>
+                            <Label
+                              htmlFor='pace-optional'
+                              className='flex items-center gap-2'
+                            >
+                              <Zap className='w-4 h-4 text-muted-foreground' />
+                              Average Pace (min/km) - Optional
+                            </Label>
+                            <Input
+                              id='pace-optional'
+                              type='number'
+                              step='0.1'
+                              value={cardioPace as any}
+                              onChange={(e) =>
+                                setCardioPace(
+                                  e.target.value ? Number(e.target.value) : ''
+                                )
+                              }
+                              className='mt-1'
+                              placeholder='e.g., 6.5'
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className='flex gap-2 pt-2'>
+                        <Button
+                          onClick={handleLogCardio}
+                          disabled={isLoggingCardio}
+                          className='flex-1'
+                        >
+                          {isLoggingCardio ? (
+                            <>
+                              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                              Logging...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className='mr-2 h-4 w-4' />
+                              Log Activity
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant='outline'
+                          onClick={() => {
+                            setShowCardioForm(false)
+                            setCardioDuration('')
+                            setCardioPace('')
+                            setCardioSteps('')
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Recent Cardio Activities */}
+            {cardioLogsForWeek && cardioLogsForWeek.length > 0 && (
+              <Card className='mb-6 border-2 border-orange-200 dark:border-orange-900 shadow-lg'>
+                <div className='h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500'></div>
+                <CardHeader>
+                  <CardTitle className='flex items-center gap-2'>
+                    <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
+                      <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
+                    </div>
+                    Recent Cardio Activities
+                  </CardTitle>
+                  <CardDescription>
+                    Your cardio sessions from the past week
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
+                    {cardioLogsForWeek.slice(0, 6).map((c: any) => (
+                      <div
+                        key={c.id}
+                        className='p-4 rounded-xl border-2 hover:border-orange-300 dark:hover:border-orange-800 bg-gradient-to-br from-orange-50 to-transparent dark:from-orange-950/20 transition-all'
+                      >
+                        <div className='flex items-start justify-between gap-2'>
+                          <div className='flex-1'>
+                            <div className='flex items-center gap-2 mb-2'>
+                              <Activity className='w-4 h-4 text-orange-600' />
+                              <span className='font-semibold'>Run</span>
+                            </div>
+                            <div className='text-xs text-muted-foreground space-y-1'>
+                              <p className='flex items-center gap-1'>
+                                <Calendar className='w-3 h-3' />
+                                {c.date}
+                              </p>
+                              <p>
+                                {c.method === 'time'
+                                  ? `${c.durationMinutes} min @ ${c.avgPaceMinPerKm} min/km`
+                                  : `${c.steps} steps`}
+                              </p>
+                              {c.distanceKm && (
+                                <p>{c.distanceKm.toFixed(2)} km</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className='text-right'>
+                            <div className='text-2xl font-bold text-orange-600'>
+                              {c.caloriesBurned || 0}
+                            </div>
+                            <div className='text-xs text-orange-600'>kcal</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Workout Generator Form - keeping existing code */}
             {showAIForm && (
               <Card className='mb-6 border-2 shadow-lg'>
                 <div className='h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500'></div>
@@ -368,7 +704,6 @@ export default function WorkoutsPage() {
                       </div>
                     )}
 
-                    {/* AI Generated Days */}
                     {aiGeneratedDays.length > 0 && !selectedAIDay && (
                       <div className='space-y-4'>
                         <h3 className='font-semibold flex items-center gap-2'>
@@ -411,7 +746,6 @@ export default function WorkoutsPage() {
                       </div>
                     )}
 
-                    {/* Selected AI Day Details */}
                     {selectedAIDay && (
                       <div className='space-y-4'>
                         <div className='space-y-2'>

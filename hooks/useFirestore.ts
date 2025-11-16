@@ -16,6 +16,8 @@ import {
   type Workout,
   type WorkoutLog,
   type DailyIntake,
+  type CardioLog,
+  type Exercise,
 } from '@/lib/firestore'
 
 /**
@@ -266,6 +268,108 @@ export function useWorkoutLogs(
     queryKey: ['workoutLogs', uid, startDate, endDate],
     queryFn: () => getWorkoutLogs(uid!, startDate, endDate),
     enabled: !!uid,
+  })
+}
+
+/**
+ * Hook to create a cardio log
+ */
+export function useCreateCardioLog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      uid,
+      cardio,
+    }: {
+      uid: string
+      cardio: Omit<CardioLog, 'createdAt' | 'id'>
+    }) => import('@/lib/firestore').then((m) => m.createCardioLog(uid, cardio)),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['cardioLogs', variables.uid] })
+      queryClient.invalidateQueries({
+        queryKey: ['dailyIntake', variables.uid, variables.cardio.date],
+      })
+    },
+  })
+}
+
+/**
+ * Hook to fetch cardio logs for a date range
+ */
+export function useCardioLogs(
+  uid: string | null,
+  startDate?: string,
+  endDate?: string
+) {
+  return useQuery({
+    queryKey: ['cardioLogs', uid, startDate, endDate],
+    queryFn: () =>
+      import('@/lib/firestore').then((m) =>
+        m.getCardioLogs(uid!, startDate, endDate)
+      ),
+    enabled: !!uid,
+  })
+}
+
+/**
+ * Hook to fetch daily intake for a date range
+ */
+export function useDailyIntakes(
+  uid: string | null,
+  startDate?: string,
+  endDate?: string
+) {
+  return useQuery({
+    queryKey: ['dailyIntakes', uid, startDate, endDate],
+    queryFn: () =>
+      import('@/lib/firestore').then((m) =>
+        m.getIntakeRange(uid!, startDate!, endDate!)
+      ),
+    enabled: !!uid && !!startDate && !!endDate,
+  })
+}
+
+/**
+ * Hook to create a weight log
+ */
+export function useCreateWeightLog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      uid,
+      date,
+      weightKg,
+    }: {
+      uid: string
+      date: string
+      weightKg: number
+    }) =>
+      import('@/lib/firestore').then((m) =>
+        m.createWeightLog(uid, date, weightKg)
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['weightLogs', variables.uid] })
+    },
+  })
+}
+
+/**
+ * Hook to fetch weight logs for a date range
+ */
+export function useWeightLogs(
+  uid: string | null,
+  startDate?: string,
+  endDate?: string
+) {
+  return useQuery({
+    queryKey: ['weightLogs', uid, startDate, endDate],
+    queryFn: () =>
+      import('@/lib/firestore').then((m) =>
+        m.getWeightLogs(uid!, startDate!, endDate!)
+      ),
+    enabled: !!uid && !!startDate && !!endDate,
   })
 }
 

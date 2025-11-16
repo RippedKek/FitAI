@@ -84,6 +84,19 @@ export interface WorkoutLog {
   createdAt: Timestamp
 }
 
+export interface CardioLog {
+  id?: string
+  date: string // YYYY-MM-DD
+  type: 'running'
+  method: 'steps' | 'time'
+  steps?: number
+  durationMinutes?: number
+  avgPaceMinPerKm?: number // minutes per km
+  distanceKm?: number
+  caloriesBurned?: number
+  createdAt: Timestamp
+}
+
 export interface Achievement {
   id?: string
   key: string
@@ -362,6 +375,124 @@ export async function getWorkoutLogs(
     })) as WorkoutLog[]
   } catch (error) {
     console.error('Error getting workout logs:', error)
+    throw error
+  }
+}
+
+/**
+ * Create a cardio log (running) for a user
+ */
+export async function createCardioLog(
+  uid: string,
+  cardio: Omit<CardioLog, 'createdAt' | 'id'>
+) {
+  try {
+    const logsRef = collection(db, 'users', uid, 'cardioLogs')
+    const now = Timestamp.now()
+
+    // Remove undefined fields because Firestore rejects undefined values
+    const payload: any = { ...cardio }
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k]
+    })
+
+    await addDoc(logsRef, {
+      ...payload,
+      createdAt: now,
+    })
+  } catch (error) {
+    console.error('Error creating cardio log:', error)
+    throw error
+  }
+}
+
+/**
+ * Get cardio logs for a user within an optional date range
+ */
+export async function getCardioLogs(
+  uid: string,
+  startDate?: string,
+  endDate?: string
+): Promise<CardioLog[]> {
+  try {
+    const logsRef = collection(db, 'users', uid, 'cardioLogs')
+    let q = query(logsRef)
+
+    if (startDate) {
+      q = query(q, where('date', '>=', startDate))
+    }
+    if (endDate) {
+      q = query(q, where('date', '<=', endDate))
+    }
+
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as CardioLog[]
+  } catch (error) {
+    console.error('Error getting cardio logs:', error)
+    throw error
+  }
+}
+
+/**
+ * Get daily intake documents for a date range
+ */
+export async function getIntakeRange(
+  uid: string,
+  startDate: string,
+  endDate: string
+): Promise<DailyIntake[]> {
+  try {
+    const intakeRef = collection(db, 'users', uid, 'intake')
+    let q = query(
+      intakeRef,
+      where('date', '>=', startDate),
+      where('date', '<=', endDate)
+    )
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => ({ ...d.data() })) as DailyIntake[]
+  } catch (error) {
+    console.error('Error getting intake range:', error)
+    throw error
+  }
+}
+
+/**
+ * Create or update a weight log for a specific date
+ */
+export async function createWeightLog(
+  uid: string,
+  date: string,
+  weightKg: number
+) {
+  try {
+    const ref = doc(db, 'users', uid, 'weights', date)
+    const now = Timestamp.now()
+    await setDoc(ref, { date, weightKg, updatedAt: now }, { merge: true })
+  } catch (error) {
+    console.error('Error creating weight log:', error)
+    throw error
+  }
+}
+
+/**
+ * Get weight logs for a date range
+ */
+export async function getWeightLogs(
+  uid: string,
+  startDate: string,
+  endDate: string
+): Promise<{ date: string; weightKg: number }[]> {
+  try {
+    const ref = collection(db, 'users', uid, 'weights')
+    const q = query(
+      ref,
+      where('date', '>=', startDate),
+      where('date', '<=', endDate)
+    )
+    const snap = await getDocs(q)
+    return snap.docs.map((d) => d.data() as any)
+  } catch (error) {
+    console.error('Error getting weight logs:', error)
     throw error
   }
 }

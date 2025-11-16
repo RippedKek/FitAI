@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import React from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import {
   useWorkoutLogs,
@@ -8,6 +9,10 @@ import {
   useUpdateDailyIntake,
   useUpdateWorkoutLog,
   useDeleteWorkoutLog,
+  useDailyIntakes,
+  useCardioLogs,
+  useWeightLogs,
+  useCreateWeightLog,
 } from '@/hooks/useFirestore'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { SidebarNav } from '@/components/layout/sidebar-nav'
@@ -20,7 +25,6 @@ import {
   Calendar,
   Flame,
   Dumbbell,
-  Printer,
   Clock,
   Trash2,
   Edit,
@@ -28,8 +32,12 @@ import {
   X,
   Utensils,
   TrendingUp,
+  Activity,
+  Scale,
+  Zap,
 } from 'lucide-react'
 import type { WorkoutLog, DailyIntake } from '@/lib/firestore'
+import { useUserProfile } from '@/hooks/useFirestore'
 
 // Simple date formatters
 function formatDate(date: Date, formatStr: string): string {
@@ -41,7 +49,6 @@ function formatDate(date: Date, formatStr: string): string {
     return `${year}-${month}-${day}`
   }
 
-  // For 'EEE, MMM d, yyyy' format
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const months = [
     'Jan',
@@ -125,6 +132,22 @@ export default function StatsPage() {
     startDate,
     endDate
   )
+  const { data: intakesRange } = useDailyIntakes(
+    user?.uid || null,
+    startDate,
+    endDate
+  )
+  const { data: cardioRange } = useCardioLogs(
+    user?.uid || null,
+    startDate,
+    endDate
+  )
+  const { data: weightRange } = useWeightLogs(
+    user?.uid || null,
+    startDate,
+    endDate
+  )
+  const { data: profile } = useUserProfile(user?.uid || null)
 
   const dayList = useMemo(() => {
     const s = new Date(startDate)
@@ -132,7 +155,17 @@ export default function StatsPage() {
     return rangeDays(s, e).map((d) => formatDate(d, 'yyyy-MM-dd'))
   }, [startDate, endDate])
 
-  // Set initial selected date to today or the last date in range
+  const [selectedSection, setSelectedSection] = useState<
+    'meals' | 'cardio' | 'weight'
+  >('meals')
+  const [mealMetric, setMealMetric] = useState<
+    'calories' | 'protein' | 'carbs' | 'fat'
+  >('calories')
+  const [cardioMetric, setCardioMetric] = useState<
+    'calories' | 'distance' | 'duration'
+  >('calories')
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+
   const [selectedDate, setSelectedDate] = useState(
     dayList[dayList.length - 1] || formatDate(new Date(), 'yyyy-MM-dd')
   )
@@ -140,28 +173,178 @@ export default function StatsPage() {
   const caloriesByDay = useMemo(() => {
     const map: Record<string, number> = {}
     for (const d of dayList) map[d] = 0
-    return map
-  }, [dayList])
-
-  const volumeByDay = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const d of dayList) map[d] = 0
-    if (workoutLogs) {
-      for (const log of workoutLogs) {
-        if (map[log.date] !== undefined) {
-          map[log.date] = (map[log.date] || 0) + (log.totalVolume || 0)
+    if (intakesRange) {
+      for (const intake of intakesRange) {
+        if (map[intake.date] !== undefined) {
+          map[intake.date] = intake.totalCalories || 0
         }
       }
     }
     return map
-  }, [dayList, workoutLogs])
+  }, [dayList, intakesRange])
 
-  // Update selected date when date range changes
+  const proteinByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (intakesRange) {
+      for (const intake of intakesRange) {
+        if (map[intake.date] !== undefined) {
+          map[intake.date] = intake.totalProtein || 0
+        }
+      }
+    }
+    return map
+  }, [dayList, intakesRange])
+
+  const carbsByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (intakesRange) {
+      for (const intake of intakesRange) {
+        if (map[intake.date] !== undefined) {
+          map[intake.date] = intake.totalCarbs || 0
+        }
+      }
+    }
+    return map
+  }, [dayList, intakesRange])
+
+  const fatByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (intakesRange) {
+      for (const intake of intakesRange) {
+        if (map[intake.date] !== undefined) {
+          map[intake.date] = intake.totalFat || 0
+        }
+      }
+    }
+    return map
+  }, [dayList, intakesRange])
+
+  const cardioCaloriesByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (cardioRange) {
+      for (const c of cardioRange) {
+        if (map[c.date] !== undefined)
+          map[c.date] = (map[c.date] || 0) + (c.caloriesBurned || 0)
+      }
+    }
+    return map
+  }, [dayList, cardioRange])
+
+  const cardioDistanceByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (cardioRange) {
+      for (const c of cardioRange) {
+        if (map[c.date] !== undefined)
+          map[c.date] = (map[c.date] || 0) + (c.distanceKm || 0)
+      }
+    }
+    return map
+  }, [dayList, cardioRange])
+
+  const cardioDurationByDay = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const d of dayList) map[d] = 0
+    if (cardioRange) {
+      for (const c of cardioRange) {
+        if (map[c.date] !== undefined)
+          map[c.date] = (map[c.date] || 0) + (c.durationMinutes || 0)
+      }
+    }
+    return map
+  }, [dayList, cardioRange])
+
+  const weightByDay = useMemo(() => {
+    const map: Record<string, number | null> = {}
+    for (const d of dayList) map[d] = null
+    if (weightRange) {
+      for (const w of weightRange) {
+        if (map[w.date] !== undefined) map[w.date] = w.weightKg
+      }
+    }
+    let last = profile?.weight || null
+    for (const d of dayList) {
+      if (map[d] === null) map[d] = last
+      else last = map[d]
+    }
+    return map
+  }, [dayList, weightRange, profile])
+
   useMemo(() => {
     if (dayList.length > 0 && !dayList.includes(selectedDate)) {
       setSelectedDate(dayList[dayList.length - 1])
     }
   }, [dayList, selectedDate])
+
+  // Get metric configuration
+  const getMetricConfig = () => {
+    if (selectedSection === 'meals') {
+      const configs = {
+        calories: {
+          label: 'Calories',
+          unit: 'kcal',
+          color: '#3b82f6',
+          icon: Flame,
+        },
+        protein: { label: 'Protein', unit: 'g', color: '#10b981', icon: Zap },
+        carbs: { label: 'Carbs', unit: 'g', color: '#f59e0b', icon: Zap },
+        fat: { label: 'Fat', unit: 'g', color: '#8b5cf6', icon: Zap },
+      }
+      return configs[mealMetric]
+    } else if (selectedSection === 'cardio') {
+      const configs = {
+        calories: {
+          label: 'Calories Burned',
+          unit: 'kcal',
+          color: '#ef4444',
+          icon: Activity,
+        },
+        distance: {
+          label: 'Distance',
+          unit: 'km',
+          color: '#06b6d4',
+          icon: Activity,
+        },
+        duration: {
+          label: 'Duration',
+          unit: 'min',
+          color: '#f97316',
+          icon: Activity,
+        },
+      }
+      return configs[cardioMetric]
+    } else {
+      return { label: 'Weight', unit: 'kg', color: '#a855f7', icon: Scale }
+    }
+  }
+
+  const getDataByDay = () => {
+    if (selectedSection === 'meals') {
+      const maps = {
+        calories: caloriesByDay,
+        protein: proteinByDay,
+        carbs: carbsByDay,
+        fat: fatByDay,
+      }
+      return maps[mealMetric]
+    } else if (selectedSection === 'cardio') {
+      const maps = {
+        calories: cardioCaloriesByDay,
+        distance: cardioDistanceByDay,
+        duration: cardioDurationByDay,
+      }
+      return maps[cardioMetric]
+    } else {
+      return weightByDay
+    }
+  }
+
+  const dataByDay = getDataByDay()
+  const config = getMetricConfig()
 
   return (
     <AuthGuard>
@@ -178,8 +361,7 @@ export default function StatsPage() {
                 <h1 className='text-3xl font-bold'>Statistics</h1>
               </div>
               <p className='text-muted-foreground mt-2'>
-                Day-wise overview for meals and workouts. Select a date to view
-                details.
+                Track your progress over time with interactive charts
               </p>
             </div>
 
@@ -229,123 +411,130 @@ export default function StatsPage() {
               </CardContent>
             </Card>
 
-            {/* Summary Cards */}
-            <div className='grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8'>
-              <Card className='shadow-md hover:shadow-lg transition-all duration-300 group'>
-                <CardHeader>
+            {/* Interactive Graph Card */}
+            <Card className='mb-6 border-2 shadow-lg'>
+              <div className='h-1 bg-gradient-to-r from-primary via-purple-500 to-pink-500'></div>
+              <CardHeader>
+                <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
                   <CardTitle className='flex items-center gap-2'>
-                    <div className='p-2 rounded-lg bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400 group-hover:scale-110 transition-transform'>
-                      <Flame className='w-5 h-5' />
-                    </div>
-                    Calories (by day)
+                    {React.createElement(config.icon, {
+                      className: 'w-5 h-5 text-primary',
+                    })}
+                    {config.label} Trends
                   </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='space-y-3'>
-                    <div className='w-full h-32 bg-gradient-to-b from-blue-50 to-transparent dark:from-blue-950/20 rounded-lg p-2'>
-                      <svg
-                        viewBox='0 0 100 28'
-                        className='w-full h-full'
-                        preserveAspectRatio='none'
-                      >
-                        {dayList.map((d, i) => {
-                          const barWidth = 100 / Math.max(1, dayList.length)
-                          const x = i * barWidth
-                          const val = caloriesByDay[d] || 0
-                          const h = Math.min(26, (val / 2500) * 26)
-                          return (
-                            <rect
-                              key={d}
-                              x={x}
-                              y={28 - h}
-                              width={barWidth * 0.8}
-                              height={h}
-                              fill='#3b82f6'
-                              rx='1'
-                              className='hover:fill-blue-700 transition-colors'
-                            />
-                          )
-                        })}
-                      </svg>
-                    </div>
-                    <p className='text-sm text-muted-foreground'>
-                      Daily calories from logged meals
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className='shadow-md hover:shadow-lg transition-all duration-300 group'>
-                <CardHeader>
-                  <CardTitle className='flex items-center gap-2'>
-                    <div className='p-2 rounded-lg bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400 group-hover:scale-110 transition-transform'>
-                      <Dumbbell className='w-5 h-5' />
-                    </div>
-                    Workout Volume
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='space-y-3'>
-                    <div className='w-full h-32 bg-gradient-to-b from-green-50 to-transparent dark:from-green-950/20 rounded-lg p-2'>
-                      <svg
-                        viewBox='0 0 100 28'
-                        className='w-full h-full'
-                        preserveAspectRatio='none'
-                      >
-                        {dayList.map((d, i) => {
-                          const barWidth = 100 / Math.max(1, dayList.length)
-                          const x = i * barWidth
-                          const val = volumeByDay[d] || 0
-                          const h = Math.min(26, (val / 10000) * 26)
-                          return (
-                            <rect
-                              key={d}
-                              x={x}
-                              y={28 - h}
-                              width={barWidth * 0.8}
-                              height={h}
-                              fill='#10b981'
-                              rx='1'
-                              className='hover:fill-green-700 transition-colors'
-                            />
-                          )
-                        })}
-                      </svg>
-                    </div>
-                    <p className='text-sm text-muted-foreground'>
-                      Total volume (kg) from logged workouts
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className='shadow-md hover:shadow-lg transition-all duration-300'>
-                <CardHeader>
-                  <CardTitle className='flex items-center gap-2'>
-                    <div className='p-2 rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-950 dark:text-purple-400'>
-                      <TrendingUp className='w-5 h-5' />
-                    </div>
-                    Quick Actions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='flex flex-col gap-3'>
-                    <Button
-                      onClick={() => window.print()}
-                      className='w-full shadow-sm hover:shadow-md transition-shadow'
+                  <div className='flex flex-wrap gap-2'>
+                    {/* Section selector */}
+                    <select
+                      value={selectedSection}
+                      onChange={(e) =>
+                        setSelectedSection(e.target.value as any)
+                      }
+                      className='px-3 py-2 rounded-lg border border-input bg-background text-sm font-medium hover:border-primary transition-colors'
                     >
-                      <Printer className='w-4 h-4 mr-2' />
-                      Print Report
-                    </Button>
-                    <p className='text-xs text-muted-foreground text-center'>
-                      Export your statistics for records
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                      <option value='meals'>🍽️ Meals</option>
+                      <option value='cardio'>🏃 Cardio</option>
+                      <option value='weight'>⚖️ Weight</option>
+                    </select>
 
-            {/* Date Tabs - Horizontal Scrollable */}
+                    {/* Metric selector for meals */}
+                    {selectedSection === 'meals' && (
+                      <select
+                        value={mealMetric}
+                        onChange={(e) => setMealMetric(e.target.value as any)}
+                        className='px-3 py-2 rounded-lg border border-input bg-background text-sm font-medium hover:border-primary transition-colors'
+                      >
+                        <option value='calories'>🔥 Calories</option>
+                        <option value='protein'>💪 Protein</option>
+                        <option value='carbs'>🌾 Carbs</option>
+                        <option value='fat'>💧 Fat</option>
+                      </select>
+                    )}
+
+                    {/* Metric selector for cardio */}
+                    {selectedSection === 'cardio' && (
+                      <select
+                        value={cardioMetric}
+                        onChange={(e) => setCardioMetric(e.target.value as any)}
+                        className='px-3 py-2 rounded-lg border border-input bg-background text-sm font-medium hover:border-primary transition-colors'
+                      >
+                        <option value='calories'>🔥 Calories</option>
+                        <option value='distance'>📏 Distance</option>
+                        <option value='duration'>⏱️ Duration</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className='relative w-full h-64 rounded-lg p-4 bg-gradient-to-br from-muted/20 to-transparent border-2'>
+                  <svg
+                    viewBox='0 0 100 50'
+                    className='w-full h-full'
+                    preserveAspectRatio='none'
+                  >
+                    {dayList.map((d, i) => {
+                      const barWidth = 100 / Math.max(1, dayList.length)
+                      const x = i * barWidth
+                      const val = (dataByDay[d] as number) || 0
+
+                      const maxVal = Math.max(
+                        ...Object.values(dataByDay).map((v) => Number(v) || 0),
+                        1
+                      )
+                      const h =
+                        maxVal > 0 ? Math.min(46, (val / maxVal) * 46) : 0
+
+                      return (
+                        <g key={d}>
+                          <rect
+                            x={x}
+                            y={50 - h}
+                            width={barWidth * 0.75}
+                            height={h}
+                            fill={config.color}
+                            rx='1'
+                            className='transition-all hover:opacity-80 cursor-pointer'
+                            onMouseEnter={() => setHoverIdx(i)}
+                            onMouseLeave={() => setHoverIdx(null)}
+                          />
+                        </g>
+                      )
+                    })}
+                  </svg>
+
+                  {/* Tooltip */}
+                  {hoverIdx !== null &&
+                    hoverIdx !== undefined &&
+                    (() => {
+                      const i = hoverIdx
+                      const d = dayList[i]
+                      const v = (dataByDay[d] as number) || 0
+                      const barWidth = 100 / Math.max(1, dayList.length)
+                      const x = i * barWidth
+                      const leftPercent = x + barWidth * 0.375
+
+                      return (
+                        <div
+                          className='absolute -top-16 transform -translate-x-1/2 bg-background border-2 rounded-lg px-3 py-2 shadow-lg z-10'
+                          style={{ left: `${leftPercent}%` }}
+                        >
+                          <div className='text-xs font-medium text-muted-foreground'>
+                            {formatDate(new Date(d), 'EEE, MMM d, yyyy')}
+                          </div>
+                          <div
+                            className='text-lg font-bold'
+                            style={{ color: config.color }}
+                          >
+                            {v.toFixed(1)} {config.unit}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Date Tabs */}
             <div className='mb-6'>
               <div className='flex items-center gap-2 mb-4'>
                 <Calendar className='w-5 h-5 text-primary' />
@@ -416,9 +605,21 @@ function DayCard({
   workoutLogs?: WorkoutLog[] | undefined
 }) {
   const { data: intake } = useDailyIntake(uid || null, date)
+  const { data: weightForDate } = useWeightLogs(uid || null, date, date)
+  const createWeight = useCreateWeightLog()
+  const { data: profile } = useUserProfile(uid || null)
   const updateIntake = useUpdateDailyIntake()
   const updateLog = useUpdateWorkoutLog()
   const deleteLog = useDeleteWorkoutLog()
+
+  const [weightInput, setWeightInput] = useState<number | ''>('')
+  useEffect(() => {
+    if (weightForDate && weightForDate.length > 0) {
+      setWeightInput(weightForDate[0].weightKg)
+    } else if (profile?.weight) {
+      setWeightInput(profile.weight)
+    }
+  }, [weightForDate, profile])
 
   const logsForDay = workoutLogs?.filter((l) => l.date === date) || []
   const totalCalories = intake?.totalCalories || 0
@@ -429,26 +630,63 @@ function DayCard({
   return (
     <Card className='shadow-md hover:shadow-lg transition-all duration-300 border-2'>
       <CardHeader className='pb-4'>
-        <div className='flex items-center justify-between'>
+        <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
           <CardTitle className='flex items-center gap-2'>
             <div className='p-1.5 rounded-lg bg-primary/10'>
               <Calendar className='w-4 h-4 text-primary' />
             </div>
             {formatDate(new Date(date), 'EEE, MMM d, yyyy')}
           </CardTitle>
-          <div className='flex gap-2'>
+          <div className='flex flex-wrap items-center gap-2'>
             {hasMeals && (
               <span className='inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs font-medium'>
                 <Utensils className='w-3 h-3' />
-                {intake.meals.length}
+                {intake.meals.length} meals
               </span>
             )}
             {hasWorkouts && (
               <span className='inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs font-medium'>
                 <Dumbbell className='w-3 h-3' />
-                {logsForDay.length}
+                {logsForDay.length} workouts
               </span>
             )}
+            <div className='flex items-center gap-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900'>
+              <Scale className='w-4 h-4 text-purple-600' />
+              <input
+                type='number'
+                step='0.1'
+                min='0'
+                inputMode='decimal'
+                value={weightInput as any}
+                onChange={(e) =>
+                  setWeightInput(
+                    e.target.value ? parseFloat(e.target.value) : ''
+                  )
+                }
+                className='w-16 bg-transparent border-none outline-none text-sm font-medium'
+                placeholder='kg'
+              />
+              <Button
+                size='sm'
+                onClick={async () => {
+                  if (!uid || weightInput === '' || weightInput === null) return
+                  try {
+                    await createWeight.mutateAsync({
+                      uid: uid,
+                      date,
+                      weightKg: Number(weightInput),
+                    })
+                    alert('Weight logged')
+                  } catch (err) {
+                    console.error(err)
+                    alert('Failed to save weight')
+                  }
+                }}
+                className='h-7 px-3'
+              >
+                Save
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>
