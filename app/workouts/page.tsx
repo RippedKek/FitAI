@@ -27,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CalendarPicker } from '@/components/ui/calendar-picker'
 import {
   calculateWorkoutVolume,
   getExerciseStats,
@@ -123,6 +124,8 @@ export default function WorkoutsPage() {
   const [cardioSteps, setCardioSteps] = useState<number | ''>('')
   const [cardioDuration, setCardioDuration] = useState<number | ''>('')
   const [cardioPace, setCardioPace] = useState<number | ''>('')
+  const [cardioDate, setCardioDate] = useState(today)
+  const [showCardioDatePicker, setShowCardioDatePicker] = useState(false)
   const [isLoggingCardio, setIsLoggingCardio] = useState(false)
 
   const handleAddExercise = () => {
@@ -334,7 +337,7 @@ export default function WorkoutsPage() {
       await createCardio.mutateAsync({
         uid: user.uid,
         cardio: {
-          date: today,
+          date: cardioDate,
           type: 'running',
           method: cardioMethod,
           steps: cardioInput.steps,
@@ -348,6 +351,7 @@ export default function WorkoutsPage() {
       setCardioDuration('')
       setCardioPace('')
       setCardioSteps('')
+      setCardioDate(today)
       setShowCardioForm(false)
       alert(`Logged run — estimated ${est} kcal burned`)
     } catch (err) {
@@ -410,7 +414,7 @@ export default function WorkoutsPage() {
             {showCardioForm && (
               <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
                 <Card className='w-full max-w-md shadow-2xl'>
-                  <div className='h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500'></div>
+                  <div className='h-1 bg-linear-to-r from-orange-500 via-red-500 to-pink-500'></div>
                   <CardHeader>
                     <CardTitle className='flex items-center gap-2'>
                       <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
@@ -424,6 +428,49 @@ export default function WorkoutsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className='space-y-4'>
+                      {/* Date Selection with Calendar */}
+                      {!showCardioDatePicker ? (
+                        <div>
+                          <Label
+                            htmlFor='cardio-date-display'
+                            className='flex items-center gap-2'
+                          >
+                            <Calendar className='w-4 h-4 text-muted-foreground' />
+                            Date
+                          </Label>
+                          <Button
+                            id='cardio-date-display'
+                            variant='outline'
+                            onClick={() => setShowCardioDatePicker(true)}
+                            className='w-full mt-1 justify-start text-left'
+                          >
+                            {new Date(cardioDate).toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div>
+                          <Label className='flex items-center gap-2 mb-3'>
+                            <Calendar className='w-4 h-4 text-muted-foreground' />
+                            Select Date
+                          </Label>
+                          <div className='flex justify-center'>
+                            <CalendarPicker
+                              value={cardioDate}
+                              onChange={(newDate) => {
+                                setCardioDate(newDate)
+                                setShowCardioDatePicker(false)
+                              }}
+                              maxDate={today}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <div className='flex gap-3 p-3 bg-muted rounded-lg'>
                         <label className='flex items-center gap-2 cursor-pointer flex-1'>
                           <input
@@ -588,7 +635,7 @@ export default function WorkoutsPage() {
             {/* Recent Cardio Activities */}
             {cardioLogsForWeek && cardioLogsForWeek.length > 0 && (
               <Card className='mb-6 border-2 border-orange-200 dark:border-orange-900 shadow-lg'>
-                <div className='h-1 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500'></div>
+                <div className='h-1 bg-linear-to-r from-orange-500 via-red-500 to-pink-500'></div>
                 <CardHeader>
                   <CardTitle className='flex items-center gap-2'>
                     <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
@@ -605,7 +652,7 @@ export default function WorkoutsPage() {
                     {cardioLogsForWeek.slice(0, 6).map((c: any) => (
                       <div
                         key={c.id}
-                        className='p-4 rounded-xl border-2 hover:border-orange-300 dark:hover:border-orange-800 bg-gradient-to-br from-orange-50 to-transparent dark:from-orange-950/20 transition-all'
+                        className='p-4 rounded-xl border-2 hover:border-orange-300 dark:hover:border-orange-800 bg-linear-to-br from-orange-50 to-transparent dark:from-orange-950/20 transition-all'
                       >
                         <div className='flex items-start justify-between gap-2'>
                           <div className='flex-1'>
@@ -645,7 +692,7 @@ export default function WorkoutsPage() {
             {/* AI Workout Generator Form - keeping existing code */}
             {showAIForm && (
               <Card className='mb-6 border-2 shadow-lg'>
-                <div className='h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500'></div>
+                <div className='h-1 bg-linear-to-r from-purple-500 via-pink-500 to-orange-500'></div>
                 <CardHeader>
                   <CardTitle className='flex items-center gap-2'>
                     <div className='p-1.5 rounded-md bg-purple-100 dark:bg-purple-950'>
@@ -833,7 +880,7 @@ export default function WorkoutsPage() {
             {/* Create Workout Form */}
             {showCreateForm && (
               <Card className='mb-6 border-2 shadow-lg'>
-                <div className='h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500'></div>
+                <div className='h-1 bg-linear-to-r from-blue-500 via-cyan-500 to-teal-500'></div>
                 <CardHeader>
                   <CardTitle className='flex items-center gap-2'>
                     <Plus className='w-5 h-5' />
@@ -1005,7 +1052,7 @@ export default function WorkoutsPage() {
             {/* Log Workout Form */}
             {showLogForm && selectedWorkout && (
               <Card className='mb-6 border-2 shadow-lg'>
-                <div className='h-1 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500'></div>
+                <div className='h-1 bg-linear-to-r from-green-500 via-emerald-500 to-teal-500'></div>
                 <CardHeader>
                   <CardTitle className='flex items-center gap-2'>
                     <Dumbbell className='w-5 h-5 text-primary' />
@@ -1286,7 +1333,7 @@ export default function WorkoutsPage() {
                           {weeklyStats.slice(0, 4).map((week, idx) => (
                             <div
                               key={week.week}
-                              className='p-4 rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 hover:scale-[1.02] transition-transform'
+                              className='p-4 rounded-xl bg-linear-to-br from-primary/5 to-primary/10 hover:scale-[1.02] transition-transform'
                             >
                               <div className='flex justify-between items-center mb-2'>
                                 <span className='font-semibold text-lg'>
