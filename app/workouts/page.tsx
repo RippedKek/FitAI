@@ -369,7 +369,7 @@ export default function WorkoutsPage() {
         <main className='flex-1 pb-16 md:pb-0 md:ml-64'>
           <div className='container mx-auto px-4 py-8 max-w-7xl'>
             {/* Header */}
-            <div className='mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
+            <div className='mb-8 flex flex-col items-start justify-between gap-4'>
               <div>
                 <div className='flex items-center gap-3 mb-2'>
                   <div className='p-2 rounded-lg bg-primary/10'>
@@ -383,11 +383,11 @@ export default function WorkoutsPage() {
                   Create routines and track your training sessions
                 </p>
               </div>
-              <div className='flex gap-2'>
+              <div className='w-full flex flex-col sm:flex-row gap-2'>
                 <Button
                   onClick={() => setShowCardioForm(true)}
                   variant='outline'
-                  className='shadow-sm hover:shadow-md transition-shadow'
+                  className='shadow-sm hover:shadow-md transition-shadow flex-1 sm:flex-initial'
                 >
                   <Activity className='mr-2 h-4 w-4' />
                   Log Cardio
@@ -395,14 +395,14 @@ export default function WorkoutsPage() {
                 <Button
                   onClick={() => setShowAIForm(true)}
                   variant='outline'
-                  className='shadow-sm hover:shadow-md transition-shadow'
+                  className='shadow-sm hover:shadow-md transition-shadow flex-1 sm:flex-initial'
                 >
                   <Wand2 className='mr-2 h-4 w-4' />
                   AI Generate
                 </Button>
                 <Button
                   onClick={() => setShowCreateForm(true)}
-                  className='shadow-md hover:shadow-lg transition-shadow'
+                  className='shadow-md hover:shadow-lg transition-shadow flex-1 sm:flex-initial'
                 >
                   <Plus className='mr-2 h-4 w-4' />
                   New Workout
