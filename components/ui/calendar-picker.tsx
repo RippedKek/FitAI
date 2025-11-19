@@ -119,52 +119,52 @@ export function CalendarPicker({
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   return (
-    <div className='w-full max-w-sm p-4 bg-background border rounded-lg shadow-sm'>
+    <div className='w-full max-w-xs p-3 bg-background border rounded-lg shadow-sm'>
       {/* Header with month/year and navigation */}
-      <div className='flex items-center justify-between mb-4'>
-        <h2 className='text-lg font-semibold'>
+      <div className='flex items-center justify-between mb-3 gap-2'>
+        <h2 className='text-base font-semibold flex-1'>
           {monthName} {year}
         </h2>
-        <div className='flex gap-1'>
+        <div className='flex gap-1 shrink-0'>
           <Button
             variant='outline'
             size='sm'
             onClick={handlePrevMonth}
-            className='h-8 w-8 p-0'
+            className='h-7 w-7 p-0'
           >
-            <ChevronLeft className='w-4 h-4' />
+            <ChevronLeft className='w-3 h-3' />
           </Button>
           <Button
             variant='outline'
             size='sm'
             onClick={handleNextMonth}
-            className='h-8 w-8 p-0'
+            className='h-7 w-7 p-0'
           >
-            <ChevronRight className='w-4 h-4' />
+            <ChevronRight className='w-3 h-3' />
           </Button>
         </div>
       </div>
 
       {/* Day headers */}
-      <div className='grid grid-cols-7 gap-2 mb-2'>
+      <div className='grid grid-cols-7 gap-1 mb-1'>
         {weekDays.map((day) => (
           <div
             key={day}
-            className='h-8 flex items-center justify-center text-xs font-medium text-muted-foreground'
+            className='h-6 flex items-center justify-center text-xs font-medium text-muted-foreground'
           >
-            {day}
+            {day.charAt(0)}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div className='grid grid-cols-7 gap-2'>
+      <div className='grid grid-cols-7 gap-1'>
         {calendarDays.map((day, idx) => (
           <button
             key={idx}
             onClick={() => day !== null && handleDayClick(day)}
             disabled={day === null || isDateDisabled(day)}
-            className={`h-8 rounded text-sm font-medium transition-colors ${
+            className={`h-6 text-xs font-medium transition-colors rounded ${
               day === null
                 ? 'invisible'
                 : isDateSelected(day)

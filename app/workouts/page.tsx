@@ -413,9 +413,9 @@ export default function WorkoutsPage() {
             {/* Cardio Log Form Modal */}
             {showCardioForm && (
               <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
-                <Card className='w-full max-w-md shadow-2xl'>
+                <Card className='w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl'>
                   <div className='h-1 bg-linear-to-r from-orange-500 via-red-500 to-pink-500'></div>
-                  <CardHeader>
+                  <CardHeader className='shrink-0'>
                     <CardTitle className='flex items-center gap-2'>
                       <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
                         <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
@@ -426,7 +426,7 @@ export default function WorkoutsPage() {
                       Track your running or walking session
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className='flex-1 overflow-y-auto pr-2'>
                     <div className='space-y-4'>
                       {/* Date Selection with Calendar */}
                       {!showCardioDatePicker ? (
@@ -453,21 +453,19 @@ export default function WorkoutsPage() {
                           </Button>
                         </div>
                       ) : (
-                        <div>
-                          <Label className='flex items-center gap-2 mb-3'>
+                        <div className='flex flex-col items-center gap-3'>
+                          <Label className='flex items-center gap-2 self-start'>
                             <Calendar className='w-4 h-4 text-muted-foreground' />
                             Select Date
                           </Label>
-                          <div className='flex justify-center'>
-                            <CalendarPicker
-                              value={cardioDate}
-                              onChange={(newDate) => {
-                                setCardioDate(newDate)
-                                setShowCardioDatePicker(false)
-                              }}
-                              maxDate={today}
-                            />
-                          </div>
+                          <CalendarPicker
+                            value={cardioDate}
+                            onChange={(newDate) => {
+                              setCardioDate(newDate)
+                              setShowCardioDatePicker(false)
+                            }}
+                            maxDate={today}
+                          />
                         </div>
                       )}
 
