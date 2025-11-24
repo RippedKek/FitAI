@@ -434,6 +434,37 @@ export async function getCardioLogs(
 }
 
 /**
+ * Update a cardio log by id
+ */
+export async function updateCardioLog(
+  uid: string,
+  logId: string,
+  updated: Partial<CardioLog>
+) {
+  try {
+    const logRef = doc(db, 'users', uid, 'cardioLogs', logId)
+    const now = Timestamp.now()
+    await updateDoc(logRef, { ...updated, updatedAt: now } as DocumentData)
+  } catch (error) {
+    console.error('Error updating cardio log:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete a cardio log
+ */
+export async function deleteCardioLog(uid: string, logId: string) {
+  try {
+    const logRef = doc(db, 'users', uid, 'cardioLogs', logId)
+    await deleteDoc(logRef)
+  } catch (error) {
+    console.error('Error deleting cardio log:', error)
+    throw error
+  }
+}
+
+/**
  * Get daily intake documents for a date range
  */
 export async function getIntakeRange(

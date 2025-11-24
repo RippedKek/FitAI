@@ -313,6 +313,46 @@ export function useCardioLogs(
 }
 
 /**
+ * Hook to update a cardio log
+ */
+export function useUpdateCardioLog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      uid,
+      logId,
+      updated,
+    }: {
+      uid: string
+      logId: string
+      updated: any
+    }) =>
+      import('@/lib/firestore').then((m) =>
+        m.updateCardioLog(uid, logId, updated)
+      ),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['cardioLogs', variables.uid] })
+    },
+  })
+}
+
+/**
+ * Hook to delete a cardio log
+ */
+export function useDeleteCardioLog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ uid, logId }: { uid: string; logId: string }) =>
+      import('@/lib/firestore').then((m) => m.deleteCardioLog(uid, logId)),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['cardioLogs', variables.uid] })
+    },
+  })
+}
+
+/**
  * Hook to fetch daily intake for a date range
  */
 export function useDailyIntakes(

@@ -13,6 +13,8 @@ import {
   useDeleteWorkoutLog,
   useCreateCardioLog,
   useCardioLogs,
+  useUpdateCardioLog,
+  useDeleteCardioLog,
 } from '@/hooks/useFirestore'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { BottomNav } from '@/components/layout/bottom-nav'
@@ -115,17 +117,24 @@ export default function WorkoutsPage() {
 
   // Cardio state
   const createCardio = useCreateCardioLog()
+  const updateCardio = useUpdateCardioLog()
+  const deleteCardio = useDeleteCardioLog()
   const { data: cardioLogsForWeek } = useCardioLogs(
     user?.uid || null,
     weekAgo,
     today
   )
+  // fetch all cardio logs (for view all)
+  const { data: cardioAll } = useCardioLogs(user?.uid || null)
   const [cardioMethod, setCardioMethod] = useState<'steps' | 'time'>('time')
   const [cardioSteps, setCardioSteps] = useState<number | ''>('')
   const [cardioDuration, setCardioDuration] = useState<number | ''>('')
   const [cardioPace, setCardioPace] = useState<number | ''>('')
   const [cardioDate, setCardioDate] = useState(today)
   const [showCardioDatePicker, setShowCardioDatePicker] = useState(false)
+  const [showAllCardio, setShowAllCardio] = useState(false)
+  const [showEditCardioModal, setShowEditCardioModal] = useState(false)
+  const [cardioToEdit, setCardioToEdit] = useState<any | null>(null)
   const [isLoggingCardio, setIsLoggingCardio] = useState(false)
 
   const handleAddExercise = () => {
@@ -359,6 +368,97 @@ export default function WorkoutsPage() {
       alert('Failed to log cardio')
     } finally {
       setIsLoggingCardio(false)
+    }
+  }
+
+  const openEditCardio = (c: any) => {
+    setCardioToEdit(c)
+    setShowEditCardioModal(true)
+  }
+
+  const handleUpdateCardio = async () => {
+    if (!user || !cardioToEdit || !cardioToEdit.id) return
+    try {
+      // Build updated payload
+      const updated: any = {
+        date: cardioToEdit.date,
+        method: cardioToEdit.method,
+        steps: cardioToEdit.steps,
+        durationMinutes: cardioToEdit.durationMinutes,
+        avgPaceMinPerKm: cardioToEdit.avgPaceMinPerKm,
+        distanceKm: cardioToEdit.distanceKm,
+      }
+
+      // Re-estimate calories based on edited inputs before saving
+      try {
+        const profileModule = await import('@/lib/firestore')
+        const profile = await profileModule.getUserProfile(user.uid)
+
+        const cardioInput: CardioInput = { method: updated.method }
+        if (updated.method === 'time') {
+          const duration = Number(updated.durationMinutes) || 0
+          const pace = Number(updated.avgPaceMinPerKm) || 0
+          if (duration && pace) {
+            cardioInput.durationMinutes = duration
+            cardioInput.avgPaceMinPerKm = pace
+            cardioInput.distanceKm = duration / pace
+            updated.distanceKm = cardioInput.distanceKm
+          }
+        } else {
+          const steps = Number(updated.steps) || 0
+          if (steps) {
+            cardioInput.steps = steps
+            if (updated.avgPaceMinPerKm)
+              cardioInput.avgPaceMinPerKm = Number(updated.avgPaceMinPerKm)
+            cardioInput.distanceKm = (steps * 0.78) / 1000
+            updated.distanceKm = cardioInput.distanceKm
+          }
+        }
+
+        const est = await estimateCardioCalories(
+          {
+            weight: profile?.weight || 70,
+            height: profile?.height,
+            age: profile?.age,
+            gender: profile?.gender,
+          },
+          cardioInput
+        )
+        updated.caloriesBurned = est
+      } catch (err) {
+        // If estimation fails, keep user-provided calories or leave undefined
+        console.error('Re-estimate failed:', err)
+        if (cardioToEdit.caloriesBurned !== undefined)
+          updated.caloriesBurned = cardioToEdit.caloriesBurned
+      }
+      // remove undefined
+      Object.keys(updated).forEach((k) => {
+        if (updated[k] === undefined) delete updated[k]
+      })
+      await updateCardio.mutateAsync({
+        uid: user.uid,
+        logId: cardioToEdit.id,
+        updated,
+      })
+      setShowEditCardioModal(false)
+      setCardioToEdit(null)
+      alert('Cardio log updated')
+    } catch (err) {
+      console.error(err)
+      alert('Failed to update cardio')
+    }
+  }
+
+  const handleDeleteCardio = async (c: any) => {
+    if (!user || !c?.id) return
+    const ok = window.confirm('Delete this cardio log?')
+    if (!ok) return
+    try {
+      await deleteCardio.mutateAsync({ uid: user.uid, logId: c.id })
+      alert('Deleted')
+    } catch (err) {
+      console.error(err)
+      alert('Failed to delete cardio')
     }
   }
 
@@ -630,24 +730,233 @@ export default function WorkoutsPage() {
               </div>
             )}
 
+            {/* Edit Cardio Modal */}
+            {showEditCardioModal && cardioToEdit && (
+              <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'>
+                <Card className='w-full max-w-md shadow-2xl'>
+                  <div className='h-1 bg-linear-to-r from-orange-500 via-red-500 to-pink-500'></div>
+                  <CardHeader>
+                    <CardTitle className='flex items-center gap-2'>
+                      <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
+                        <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
+                      </div>
+                      Edit Cardio
+                    </CardTitle>
+                    <CardDescription>
+                      Edit previous cardio session
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className='space-y-4'>
+                      <div>
+                        <Label className='flex items-center gap-2'>Date</Label>
+                        <CalendarPicker
+                          value={cardioToEdit.date}
+                          onChange={(d) =>
+                            setCardioToEdit({ ...cardioToEdit, date: d })
+                          }
+                          maxDate={today}
+                        />
+                      </div>
+
+                      <div className='flex gap-3 p-3 bg-muted rounded-lg'>
+                        <label className='flex items-center gap-2 cursor-pointer flex-1'>
+                          <input
+                            type='radio'
+                            name='edit-cardio-method'
+                            checked={cardioToEdit.method === 'time'}
+                            onChange={() =>
+                              setCardioToEdit({
+                                ...cardioToEdit,
+                                method: 'time',
+                              })
+                            }
+                            className='w-4 h-4'
+                          />
+                          <div className='flex items-center gap-2'>
+                            <Clock className='w-4 h-4 text-primary' />
+                            <span className='text-sm font-medium'>
+                              Time + Pace
+                            </span>
+                          </div>
+                        </label>
+                        <label className='flex items-center gap-2 cursor-pointer flex-1'>
+                          <input
+                            type='radio'
+                            name='edit-cardio-method'
+                            checked={cardioToEdit.method === 'steps'}
+                            onChange={() =>
+                              setCardioToEdit({
+                                ...cardioToEdit,
+                                method: 'steps',
+                              })
+                            }
+                            className='w-4 h-4'
+                          />
+                          <div className='flex items-center gap-2'>
+                            <Footprints className='w-4 h-4 text-primary' />
+                            <span className='text-sm font-medium'>Steps</span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {cardioToEdit.method === 'time' ? (
+                        <div className='space-y-3'>
+                          <div>
+                            <Label className='flex items-center gap-2'>
+                              Duration (minutes)
+                            </Label>
+                            <Input
+                              type='number'
+                              value={cardioToEdit.durationMinutes as any}
+                              onChange={(e) =>
+                                setCardioToEdit({
+                                  ...cardioToEdit,
+                                  durationMinutes: e.target.value
+                                    ? Number(e.target.value)
+                                    : '',
+                                })
+                              }
+                              className='mt-1'
+                            />
+                          </div>
+                          <div>
+                            <Label className='flex items-center gap-2'>
+                              Average Pace (min/km)
+                            </Label>
+                            <Input
+                              type='number'
+                              step='0.1'
+                              value={cardioToEdit.avgPaceMinPerKm as any}
+                              onChange={(e) =>
+                                setCardioToEdit({
+                                  ...cardioToEdit,
+                                  avgPaceMinPerKm: e.target.value
+                                    ? Number(e.target.value)
+                                    : '',
+                                })
+                              }
+                              className='mt-1'
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className='space-y-3'>
+                          <div>
+                            <Label className='flex items-center gap-2'>
+                              Steps
+                            </Label>
+                            <Input
+                              type='number'
+                              value={cardioToEdit.steps as any}
+                              onChange={(e) =>
+                                setCardioToEdit({
+                                  ...cardioToEdit,
+                                  steps: e.target.value
+                                    ? Number(e.target.value)
+                                    : '',
+                                })
+                              }
+                              className='mt-1'
+                            />
+                          </div>
+                          <div>
+                            <Label className='flex items-center gap-2'>
+                              Average Pace (min/km) - Optional
+                            </Label>
+                            <Input
+                              type='number'
+                              step='0.1'
+                              value={cardioToEdit.avgPaceMinPerKm as any}
+                              onChange={(e) =>
+                                setCardioToEdit({
+                                  ...cardioToEdit,
+                                  avgPaceMinPerKm: e.target.value
+                                    ? Number(e.target.value)
+                                    : '',
+                                })
+                              }
+                              className='mt-1'
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <Label className='flex items-center gap-2'>
+                          Estimated Calories (kcal)
+                        </Label>
+                        <Input
+                          type='number'
+                          value={cardioToEdit.caloriesBurned as any}
+                          onChange={(e) =>
+                            setCardioToEdit({
+                              ...cardioToEdit,
+                              caloriesBurned: e.target.value
+                                ? Number(e.target.value)
+                                : '',
+                            })
+                          }
+                          className='mt-1'
+                        />
+                      </div>
+
+                      <div className='flex gap-2'>
+                        <Button onClick={handleUpdateCardio} className='flex-1'>
+                          Save
+                        </Button>
+                        <Button
+                          variant='outline'
+                          onClick={() => {
+                            setShowEditCardioModal(false)
+                            setCardioToEdit(null)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {/* Recent Cardio Activities */}
             {cardioLogsForWeek && cardioLogsForWeek.length > 0 && (
               <Card className='mb-6 border-2 border-orange-200 dark:border-orange-900 shadow-lg'>
                 <div className='h-1 bg-linear-to-r from-orange-500 via-red-500 to-pink-500'></div>
                 <CardHeader>
-                  <CardTitle className='flex items-center gap-2'>
-                    <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
-                      <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
+                  <div className='flex items-start justify-between w-full'>
+                    <div>
+                      <CardTitle className='flex items-center gap-2'>
+                        <div className='p-1.5 rounded-md bg-orange-100 dark:bg-orange-950'>
+                          <Activity className='w-5 h-5 text-orange-600 dark:text-orange-400' />
+                        </div>
+                        Recent Cardio Activities
+                      </CardTitle>
+                      <CardDescription>
+                        Your cardio sessions from the past week
+                      </CardDescription>
                     </div>
-                    Recent Cardio Activities
-                  </CardTitle>
-                  <CardDescription>
-                    Your cardio sessions from the past week
-                  </CardDescription>
+                    <div className='flex items-center gap-2'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => setShowAllCardio((s) => !s)}
+                      >
+                        {showAllCardio ? 'Show Recent' : 'View All'}
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'>
-                    {cardioLogsForWeek.slice(0, 6).map((c: any) => (
+                    {(showAllCardio
+                      ? (cardioAll || []).sort((a: any, b: any) =>
+                          b.date.localeCompare(a.date)
+                        )
+                      : cardioLogsForWeek.slice(0, 6)
+                    ).map((c: any) => (
                       <div
                         key={c.id}
                         className='p-4 rounded-xl border-2 hover:border-orange-300 dark:hover:border-orange-800 bg-linear-to-br from-orange-50 to-transparent dark:from-orange-950/20 transition-all'
@@ -673,11 +982,29 @@ export default function WorkoutsPage() {
                               )}
                             </div>
                           </div>
-                          <div className='text-right'>
+                          <div className='flex flex-col items-end gap-2'>
                             <div className='text-2xl font-bold text-orange-600'>
                               {c.caloriesBurned || 0}
                             </div>
                             <div className='text-xs text-orange-600'>kcal</div>
+                            <div className='flex gap-1 mt-2'>
+                              <Button
+                                size='sm'
+                                variant='ghost'
+                                onClick={() => openEditCardio(c)}
+                                className='hover:bg-primary/5'
+                              >
+                                <Edit className='w-4 h-4' />
+                              </Button>
+                              <Button
+                                size='sm'
+                                variant='ghost'
+                                onClick={() => handleDeleteCardio(c)}
+                                className='hover:bg-red-50'
+                              >
+                                <Trash2 className='w-4 h-4 text-red-600' />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
